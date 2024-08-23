@@ -26,6 +26,47 @@ class CharAction(Enum):
     ## OTHERS
     SHOOT = 8
 
+class Object(pygame.sprite.Sprite):
+    def __init__(self, x, y, width, height, name=None):
+        super().__init__()
+        self.rect = pygame.Rect(x, y, width, height)
+        self.image = pygame.Surface((width, height), pygame.SRCALPHA, 32)
+        self.width = width
+        self.height = height
+        self.name = name
+
+    def load_object(dir1, dir2, file, width, height, scaling=1):
+        path = join(dir1, dir2, file)
+        image = pygame.image.load(path).convert_alpha()
+        surface = pygame.Surface((width, height), pygame.SRCALPHA, 32)
+        rect = pygame.Rect(0, 0, width, height)
+        surface.blit(image, (0, 0), rect)
+        return pygame.transform.scale_by(surface, scaling)
+
+    def draw(self, game_window):
+        game_window.blit(self.image, (self.rect.x, self.rect.y))
+
+def load_object(dir1, dir2, file, width, height, scaling=1):
+    path = join(dir1, dir2, file)
+    image = pygame.image.load(path).convert_alpha()
+    surface = pygame.Surface((width, height), pygame.SRCALPHA, 32)
+    rect = pygame.Rect(0, 0, width, height)
+    surface.blit(image, (0, 0), rect)
+    return pygame.transform.scale_by(surface, scaling)
+
+class Wall(Object):
+    def __init__(self, x, y, width, height, rotation=0):
+        super().__init__(x, y, width, height)
+        self.rotation = rotation
+        wall = load_object('images', 'Terrain', 'chosen_wall.png', width, height)
+        self.original_image = wall.copy()  # store original image
+        self.image.blit(wall, (0, 0))
+
+        # rotate image
+        self.image = pygame.transform.rotate(self.original_image, self.rotation)
+        self.mask = pygame.mask.from_surface(self.image)
+
+
 class BoxHead:
 
     BG_COLOR = (0, 150, 200, 150)
@@ -94,8 +135,17 @@ class BoxHead:
         # self.window.fill(self.BG_COLOR)
 
         # draw background tiles
-        for tile in self.bg_tiles:
-            self.window.blit(self.bg_image, tile)
+        self._draw_background(self.bg_image, self.bg_tiles)
+
+        # draw wall tiles
+        self.wall_width, self.wall_height = 64, 16
+        # wall1 = Wall(100, 100, self.wall_width, self.wall_height)
+        self.range_end = (self.WIDTH // self.wall_width + 1) // 2
+        # wall = [Wall(i * self.wall_width, 0,
+        #              self.wall_width, self.wall_height) for i in range(0, range_end - 3)]
+        # for j in wall:
+        #     j.draw(self.window)
+        wall = self._draw_walls(self.window, self.wall_width, self.wall_height, self.range_end)
 
 
         # Constantly updates the pygame environment per frame
@@ -117,6 +167,20 @@ class BoxHead:
                 if event.key == pygame.K_ESCAPE:
                     pygame.quit()
                     sys.exit()
+
+    # helper function for drawing on the pygame window
+    def _draw_background(self, bg_img, bg_tiles):
+        for tile in bg_tiles:
+            self.window.blit(bg_img, tile)
+
+    def _draw_walls(self, window, wall_width, wall_height, range):
+        wall = [Wall(i * wall_width, 0,
+                wall_width, wall_height) for i in range(0, range - 3)]
+        
+        for a in wall:
+            a.draw(window)
+
+        return wall
 
 if __name__ == "__main__":
     boxHead = BoxHead()
