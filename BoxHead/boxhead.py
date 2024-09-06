@@ -248,17 +248,18 @@ class Bullet(pygame.sprite.Sprite):
 class BoxHead:
 
     BG_COLOR = (0, 150, 200, 150)
-    WIDTH, HEIGHT = 1400, 900
-    FPS = 60
-    PLAYER_SPEED = 2
-    MONSTER_SPEED = 1
+    # WIDTH, HEIGHT = 1400, 900
+    WIDTH, HEIGHT = 1280, 720
+    PLAYER_SPEED = 5 # 2 for pc
+    MONSTER_SPEED = 3 # 1 for pc
 
-    def __init__(self):
+    def __init__(self, fps):
         self.reset()
+        self.fps = fps
         self.last_action = ''
         self._pygame_initialise()
         self.player = Player(self.WIDTH / 2 - 25, self.HEIGHT / 2 - 25, 50, 50)
-        self.monster = Monster(self.WIDTH / 2 - 25, self.HEIGHT / 2 - 125, 16, 16)
+        self.monster = Monster(self.WIDTH / 2 - 25, self.HEIGHT / 2 - 225, 16, 16)
 
         self.bullets = []  # List to store bullets
         self.last_bullet_fired = 0  # Time when the last bullet was fired
@@ -375,6 +376,10 @@ class BoxHead:
 
         # render and draw the monster
         self.monster.draw(self.window)
+        
+        # if player and monster collide
+        if pygame.sprite.collide_mask(self.player, self.monster):
+            self.game_over = True
 
         # Update and draw bullets
         for bullet in self.bullets:
@@ -542,7 +547,7 @@ class BoxHead:
             return monster
 
 if __name__ == "__main__":
-    boxHead = BoxHead()
+    boxHead = BoxHead(60)
     
     while True:
         boxHead.step()
