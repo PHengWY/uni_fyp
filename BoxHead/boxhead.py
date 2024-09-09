@@ -1,5 +1,6 @@
 import random
 import math
+import numpy as np
 import time
 from enum import Enum
 import pygame
@@ -73,8 +74,6 @@ class Player(pygame.sprite.Sprite):
         self.mask = None
         self.direction = 'up'
         self.fire_direction = 'up'
-        # self.gun = Gun.PISTOL
-        # self.current_ammo = self.gun.value.ammo_capacity
         self.animation_count = 0
         self.health = 90
         self.damage = 15
@@ -248,26 +247,16 @@ class Bullet(pygame.sprite.Sprite):
 class BoxHead:
 
     BG_COLOR = (0, 150, 200, 150)
-    # WIDTH, HEIGHT = 1400, 900
-    WIDTH, HEIGHT = 1280, 720
-    PLAYER_SPEED = 5 # 2 for pc
-    MONSTER_SPEED = 3 # 1 for pc
+    WIDTH, HEIGHT = 1400, 900
+    # WIDTH, HEIGHT = 1280, 720
+    PLAYER_SPEED = 2 # 2 for pc 5 for laptop
+    MONSTER_SPEED = 1 # 1 for pc 3 for laptop
 
     def __init__(self, fps):
+        self._pygame_initialise()
         self.reset()
         self.fps = fps
         self.last_action = ''
-        self._pygame_initialise()
-        self.player = Player(self.WIDTH / 2 - 25, self.HEIGHT / 2 - 25, 50, 50)
-        self.monster = Monster(self.WIDTH / 2 - 25, self.HEIGHT / 2 - 225, 16, 16)
-
-        self.bullets = []  # List to store bullets
-        self.last_bullet_fired = 0  # Time when the last bullet was fired
-
-        # Initialize the game over flag
-        self.game_over = False
-
-        self.points = 0
 
     ## helper functions for different parts of the program
 
@@ -329,8 +318,23 @@ class BoxHead:
         # initialise background
         self.bg_tiles, self.bg_image = self.get_background('images/Terrain/chosen_terrain.png')
 
-    def reset(self):
-        pass
+    def reset(self, seed=None):
+        random.seed(seed)
+
+        self.player = Player(self.WIDTH / 2 - 25, self.HEIGHT / 2 - 25, 50, 50) # starting player pos
+        self.monster = self.spawn_monster(seed) # starting monster pos
+        # self.monster = Monster(self.WIDTH / 2 - 25, self.HEIGHT / 2 - 225, 16, 16) # starting monster pos
+
+        self.bullets = []  # list to store bullets
+
+        # game over flag
+        self.game_over = False
+
+        # time when the last bullet was fired
+        self.last_bullet_fired = 0  
+
+        # start off with 0 points
+        self.points = 0
 
     # player action
     def perform_action(self, char_action: CharAction) -> bool:
@@ -344,7 +348,7 @@ class BoxHead:
             self.player.move_left(self.PLAYER_SPEED)
         elif char_action == CharAction.SHOOT:
             self.shoot_bullet()
-            print("Player is shooting!")
+            # print("Player is shooting!")
         return True
 
     def shoot_bullet(self):
@@ -362,7 +366,7 @@ class BoxHead:
     def render(self):
 
         # draw background tiles
-        self._draw_background(self.bg_image, self.bg_tiles)
+        self.draw_background(self.bg_image, self.bg_tiles)
 
         # draw wall tiles
         self.wall_width, self.wall_height = 64, 16
@@ -371,15 +375,16 @@ class BoxHead:
         self.all_walls = self._draw_walls(self.window, self.WIDTH, self.HEIGHT, self.wall_width, self.wall_height, self.range_width, self.range_height)
 
         # render and draw the player
-        self.player.loop(self.FPS)
+        self.player.loop(self.fps)
         self.player.draw(self.window)
 
         # render and draw the monster
         self.monster.draw(self.window)
         
         # if player and monster collide
-        if pygame.sprite.collide_mask(self.player, self.monster):
+        if pygame.sprite.collide_rect(self.player, self.monster):
             self.game_over = True
+            self.monster = self.spawn_monster()
 
         # Update and draw bullets
         for bullet in self.bullets:
@@ -396,11 +401,15 @@ class BoxHead:
 
         self._emergency_event()
 
+        # movement collision
+        self.player_movement(self.all_walls, self.PLAYER_SPEED)
+        self.monster_movement(self.all_walls, self.MONSTER_SPEED)
+
         # Constantly updates the pygame environment per frame
         pygame.display.update()
 
         # Limit FPS
-        self.clock.tick(self.FPS)
+        self.clock.tick(self.fps)
 
     def _emergency_event(self):
         # Event to quit the game when necessary
@@ -416,13 +425,9 @@ class BoxHead:
                 if event.key == pygame.K_ESCAPE:
                     pygame.quit()
                     sys.exit()
-
-        self._player_movement(self.all_walls, self.PLAYER_SPEED)
-
-        self._monster_movement(self.all_walls, self.MONSTER_SPEED)
         
     # function for player movement
-    def _player_movement(self, objects, player_speed):
+    def player_movement(self, objects, player_speed):
 
         self.player.x_vel = 0
         self.player.y_vel = 0
@@ -445,9 +450,7 @@ class BoxHead:
         elif key_pressed[pygame.K_SPACE]:
             self.perform_action(CharAction.SHOOT)
 
-    # function for monster movement (heading towards the player)
-    def _monster_movement(self, objects, monster_speed):
-
+    def monster_movement(self, objects, monster_speed):
         self.monster.x_vel = 0
         self.monster.y_vel = 0
 
@@ -455,73 +458,74 @@ class BoxHead:
         player_x_pos, player_y_pos = self.player.get_position()
         monster_x_pos, monster_y_pos = self.monster.get_position()
 
-        if monster_y_pos < 50:
-            self.monster.y_vel = monster_speed
-        else:
-            direction_x = player_x_pos - monster_x_pos
-            direction_y = player_y_pos - monster_y_pos
+        direction_x = player_x_pos - monster_x_pos
+        direction_y = player_y_pos - monster_y_pos
 
+        # Calculate the distance to the player
+        distance = math.sqrt(direction_x ** 2 + direction_y ** 2)
+
+        if direction_x > 0 and direction_y > 0:
+            self.monster.x_vel = direction_x / distance * monster_speed + 0.5
+            self.monster.y_vel = direction_y / distance * monster_speed + 0.5
+        else:
             # Normalize the direction vector
-            distance = math.sqrt(direction_x ** 2 + direction_y ** 2)
-            if distance != 0:
-                direction_x /= distance
-                direction_y /= distance
+            direction_x /= distance
+            direction_y /= distance
 
             # Move the monster towards the player
             self.monster.x_vel = direction_x * monster_speed
             self.monster.y_vel = direction_y * monster_speed
 
-            # Check for collisions and adjust movement accordingly
-            collide_left = self.collide_horizontal(self.monster, objects, -monster_speed)
-            collide_right = self.collide_horizontal(self.monster, objects, monster_speed)
-            collide_up = self.collide_vertical(self.monster, objects, -monster_speed)
-            collide_down = self.collide_vertical(self.monster, objects, monster_speed)
+        # Check for collisions and adjust movement accordingly
+        collide_left = self.collide_horizontal(self.monster, objects, -monster_speed)
+        collide_right = self.collide_horizontal(self.monster, objects, monster_speed)
+        collide_up = self.collide_vertical(self.monster, objects, -monster_speed)
+        collide_down = self.collide_vertical(self.monster, objects, monster_speed)
 
-            if collide_left is not None:
-                self.monster.x_vel = 0
-            if collide_right is not None:
-                self.monster.x_vel = 0
-            if collide_up is not None:
-                self.monster.y_vel = 0
-            if collide_down is not None:
-                self.monster.y_vel = 0
+        if collide_left is not None and self.monster.x_vel < 0:
+            self.monster.x_vel = 0
+        if collide_right is not None and self.monster.x_vel > 0:
+            self.monster.x_vel = 0
+        if collide_up is not None and self.monster.y_vel < 0:
+            self.monster.y_vel = 0
+        if collide_down is not None and self.monster.y_vel > 0:
+            self.monster.y_vel = 0
 
         # Move the monster based on the adjusted velocities
         self.monster.move(self.monster.x_vel, self.monster.y_vel)
         self.monster.update_sprite()
 
-
     def step(self):
         pass
 
     # helper function for drawing on the pygame window
-    def _draw_background(self, bg_img, bg_tiles):
+    def draw_background(self, bg_img, bg_tiles):
         for tile in bg_tiles:
             self.window.blit(bg_img, tile)
 
     # drawing walls around the map
     def _draw_walls(self, window, win_width, win_height, wall_width, wall_height, range_width, range_height):
         wall = [Wall(i * wall_width, 0,
-                wall_width, wall_height) for i in range(0, range_width - 3)]
+                wall_width, wall_height) for i in range(0, range_width)]
 
         wall2 = [Wall(win_width - i * wall_width, 0,
-                 wall_width, wall_height) for i in range(range_width - 3, 0, -1)]
+                 wall_width, wall_height) for i in range(range_width, 0, -1)]
         
         wall3 = [Wall(i * wall_width, win_height - wall_height,
-                 wall_width, wall_height) for i in range(0, range_width - 3)]
+                 wall_width, wall_height) for i in range(0, range_width)]
         
         wall4 = [Wall(win_width - i * wall_width, win_height - wall_height,
-                 wall_width, wall_height) for i in range(range_width - 3, 0, -1)]
+                 wall_width, wall_height) for i in range(range_width, 0, -1)]
         
-        wall5 = [Wall(0, i * wall_height, wall_width, wall_height, 90) for i in range(0, range_height - 3)]
+        wall5 = [Wall(0, i * wall_height, wall_width, wall_height, 90) for i in range(0, range_height + 16)]
 
-        wall6 = [Wall(0, win_height - i * wall_height, wall_width, wall_height, 90) for i in range(range_height - 2, 0, -1)]
+        wall6 = [Wall(0, win_height - i * wall_height, wall_width, wall_height, 90) for i in range(range_height, 0, -1)]
 
         wall7 = [Wall(win_width - wall_height, i * wall_height,
-                      wall_width, wall_height, -90) for i in range(0, range_height - 3)]
+                      wall_width, wall_height, -90) for i in range(0, range_height + 16)]
         
         wall8 = [Wall(win_width - wall_height, win_height - i * wall_height,
-                      wall_width, wall_height, -90) for i in range(range_height - 3, 0, -1)]
+                      wall_width, wall_height, -90) for i in range(range_height, 0, -1)]
         
         all_walls = wall + wall2 + wall3 + wall4 + wall5 + wall6 + wall7 + wall8
 
@@ -530,7 +534,7 @@ class BoxHead:
         
         return all_walls
     
-    def spawn_monster(self):
+    def spawn_monster(self, seed=None):
         # Spawn a monster at a random location and add it to the monster group.
         area_select = random.choice([i for i in range(1, 5)])
         if area_select == 1:
@@ -548,7 +552,12 @@ class BoxHead:
 
 if __name__ == "__main__":
     boxHead = BoxHead(60)
-    
-    while True:
-        boxHead.step()
+    boxHead.render()
+
+    while(True):
+        rand_action = random.choice(list(CharAction))
+        print(rand_action)
+
+        boxHead.perform_action(rand_action)
         boxHead.render()
+        # print(boxHead.player.get_position())

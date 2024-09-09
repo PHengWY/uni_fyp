@@ -4,6 +4,7 @@ from gymnasium.envs.registration import register
 from gymnasium.utils.env_checker import check_env
 import pygame
 
+import random
 import numpy as np
 # import matplotlib.pyplot as plt
 # import seaborn as sns
@@ -13,14 +14,14 @@ from boxhead import BoxHead, CharAction
 
 # register module
 register(
-    id='boxhead',                                # call it whatever you want
-    entry_point='boxhead_env:BoxHeadEnv', # module_name:class_name
+    id='boxhead',                            
+    entry_point='boxhead_env:BoxHeadEnv',
 )
 
 class BoxHeadEnv(gym.Env):
     # metadata is a required attribute
     # render_modes in our environment is either None or 'human'.
-    metadata = {"render_modes": ["human"], 'render_fps': 4}
+    metadata = {"render_modes": ["human"], 'render_fps': 60}
 
     def __init__(self, render_mode=None):
         super(BoxHeadEnv, self).__init__()
@@ -34,29 +35,35 @@ class BoxHeadEnv(gym.Env):
 
         # Define observation space (example: player position and monster positions)
         self.observation_space = spaces.Box(
-            low=np.array([0, 0, 0, 0, 0]),
+            low=np.array([0, 0, 0, 0]),
             high=np.array([BoxHead.WIDTH, BoxHead.HEIGHT, # player position
-                           BoxHead.WIDTH, BoxHead.HEIGHT, # monster position
-                           100]), # points
-            shape=(5,),
-            dtype=np.float32)
+                           BoxHead.WIDTH, BoxHead.HEIGHT]), # monster position
+            shape=(4,),
+            dtype=np.int32)
 
-    def reset(self):
-        self.game.reset()
-        return self._get_observation()
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed)
+        self.game.reset(seed=seed)
+        
+        obs = self._get_observation()
+        info = {}
+
+        # Render environment
+        if(self.render_mode=='human'):
+            self.render()
+
+        return obs, info
     
     def step(self, action):
-        char_action = CharAction(action)
-        self.game.perform_action(char_action)
-
-        # Update game state
-        self.game.step()
+        char_action = self.game.perform_action(bh.CharAction(action))
 
         # Get observation
         observation = self._get_observation()
-        reward = self._get_reward()
-        done = self._is_done()
+        reward, done = self._get_reward(char_action)
         info = {}
+
+        if(self.render_mode=='human'):
+            self.render()
 
         return observation, reward, done, False, info
     
@@ -64,23 +71,47 @@ class BoxHeadEnv(gym.Env):
         # Extract relevant game state information
         player_x, player_y = self.game.player.get_position()
         monster_x, monster_y = self.game.monster.get_position()
-        return np.array([player_x, player_y, monster_x, monster_y, self.game.points])
+        return np.array([player_x, player_y, monster_x, monster_y])
     
-    def _get_reward(self):
+    def _get_reward(self, action):
         # Define your reward function (e.g., reward for hitting the monster, penalty for getting hit)
-        if self.game.points > 0:
-            return 1
+        reward = 0
+        done = False
+
+        x, y = self.game.player.get_position()
+
+        # define the reward
+        if action:
+            if self.game.points > 0: # bullet hits monster
+                reward = 1
+                done = True
+            elif self.game.game_over: # monster hits player
+                reward = -1
+                done = True
+            elif x < 0 + 32 or x > self.game.WIDTH - 32: # player somehow go out of bounds despite supposed collision
+                reward = -1
+                done = True
+            elif y < 0 + 8 or y > self.game.HEIGHT - 8: # player somehow go out of bounds despite supposed collision
+                reward = -1
+                done = True
+            else:
+                reward = 0
+                done = False
         else:
-            return -1
+            reward = 0
+            done = False
+        
+        return reward, done
 
     def _is_done(self):
         return self.game.game_over
 
     def render(self, mode='human'):
-        self.game.render()  
+        self.game.render()  # call the render method of BoxHead
 
     def close(self):
-        self.pygame.quit()
+        # self.pygame.quit()
+        pass
 
 if __name__=="__main__":
     env = gym.make('boxhead', render_mode='human')
@@ -94,12 +125,11 @@ if __name__=="__main__":
     obs = env.reset()[0]
 
     # Take some random actions
-    clock = pygame.time.Clock()
     while(True):
-        rand_action = env.action_space.sample()
-        obs, reward, terminated, _, _ = env.step(rand_action)
+        random_action = env.action_space.sample()
+        print(random_action)
+        obs, reward, done, _, _ = env.step(random_action)
+        print(f'Observation: {obs}, Reward: {reward}, Done: {done}')
 
-        if(terminated):
+        if(done):
             obs = env.reset()[0]
-
-        clock.tick(60)  # Limit the game loop to 60 FPS

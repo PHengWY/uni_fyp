@@ -9,8 +9,8 @@ from os.path import isfile, join
 from enum import Enum
 from collections import namedtuple
 
-import gymnasium as gym
-from gymnasium import spaces
+# import gymnasium as gym
+# from gymnasium import spaces
 
 pygame.init()
 font = pygame.font.Font('Fonts/arial.ttf', 20)
